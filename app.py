@@ -111,13 +111,98 @@ def view_winners_page():
     
     if st.button("Show Winners"):
         winners_df = data_processor.get_all_winners(round_number)
+        
         if winners_df.empty:
             st.warning(f"No winners found for Round {round_number}.")
         else:
+            # Identify duplicates based on both mobile_number and unique_code
+            winners_df['is_duplicate'] = winners_df.duplicated(subset=['mobile_number', 'unique_code'], keep=False)
+            winners_df['previous_rounds'] = winners_df.groupby(['mobile_number', 'unique_code'])['round_number'].transform(lambda x: ', '.join(map(str, x[:-1])))
+            
             st.write(f"Total Winners: {len(winners_df)}")
             st.write(f"WhatsApp Winners: {len(winners_df[winners_df['source'] == 'WhatsApp'])}")
             st.write(f"Post Winners: {len(winners_df[winners_df['source'] == 'Post'])}")
-            st.dataframe(winners_df)
+            
+            # Highlight duplicates in the DataFrame
+            st.dataframe(
+                winners_df.style.apply(
+                    lambda x: ['background-color: #FFC7CE' if x['is_duplicate'] else '' for _ in x], 
+                    axis=1
+                )
+            )
+    
+    else:  # All Rounds with duplicate detection
+        if st.button("Show All Winners"):
+            # Get winners from all rounds
+            query = '''
+                SELECT p.mobile_number, p.unique_code, p.message, p.source, w.round_number
+                FROM participants p
+                JOIN winners w ON p.id = w.participant_id
+                ORDER BY w.round_number, p.source
+            '''
+            
+            conn = sqlite3.connect(database.db_path)
+            all_winners_df = pd.read_sql_query(query, conn)
+            conn.close()
+            
+            if all_winners_df.empty:
+                st.warning("No winners found in any round.")
+            else:
+                # Find duplicates
+                duplicate_mobile_numbers = all_winners_df[all_winners_df.duplicated(subset=['mobile_number'], keep=False)]['mobile_number'].unique()
+                
+                # Create a new DataFrame for display with color formatting
+                display_df = all_winners_df.copy()
+                display_df['status'] = ""
+                
+                # Mark duplicates and add information
+                for mobile in duplicate_mobile_numbers:
+                    occurrences = all_winners_df[all_winners_df['mobile_number'] == mobile].sort_values('round_number')
+                    rounds = occurrences['round_number'].tolist()
+                    
+                    # For each occurrence, add status information
+                    for index, row in occurrences.iterrows():
+                        current_round = row['round_number']
+                        other_rounds = [r for r in rounds if r != current_round]
+                        if other_rounds:
+                            duplicate_info = f"Duplicated winner from round(s): {', '.join(map(str, other_rounds))}"
+                            display_df.at[index, 'status'] = duplicate_info
+                
+                # Display counts
+                st.write(f"Total Winners Across All Rounds: {len(all_winners_df)}")
+                st.write(f"Unique Winners: {len(all_winners_df['mobile_number'].unique())}")
+                st.write(f"Duplicate Winners: {len(duplicate_mobile_numbers)}")
+                
+                # Create two dataframes - one for clean winners, one for duplicates
+                clean_df = display_df[display_df['status'] == ""].drop(columns=['status'])
+                duplicates_df = display_df[display_df['status'] != ""]
+                
+                # Show duplicates with highlighting
+                if not duplicates_df.empty:
+                    st.subheader("⚠️ Duplicate Winners (Appearing in Multiple Rounds)")
+                    st.markdown("""
+                    <style>
+                    .duplicate-winner {
+                        color: red;
+                        font-weight: bold;
+                    }
+                    </style>
+                    """, unsafe_allow_html=True)
+                    
+                    # Display duplicates with HTML formatting for red text
+                    for _, row in duplicates_df.iterrows():
+                        st.markdown(
+                            f"<div class='duplicate-winner'>Round {row['round_number']} - "
+                            f"{row['mobile_number']} - {row['status']}</div>", 
+                            unsafe_allow_html=True
+                        )
+                    
+                    st.dataframe(duplicates_df)
+                
+                # Show clean winners
+                if not clean_df.empty:
+                    st.subheader("Clean Winners (Single Round Only)")
+                    st.dataframe(clean_df)
 
 def export_winners_page():
     st.header("Export Winners to Excel")

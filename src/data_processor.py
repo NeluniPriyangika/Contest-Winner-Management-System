@@ -64,17 +64,32 @@ class DataProcessor:
             return False, f"Error importing Post winners: {str(e)}"
     
     def get_all_winners(self, round_number):
-        """Get all winners (WhatsApp + Post) for a specific round."""
+        """Get all winners (WhatsApp + Post) for a specific round, including previous rounds."""
         query = '''
-            SELECT p.mobile_number, p.unique_code, p.message, p.source
+            SELECT p.mobile_number, p.unique_code, p.message, p.source, w.round_number
             FROM participants p
             JOIN winners w ON p.id = w.participant_id
-            WHERE w.round_number = ?
-            ORDER BY p.source, w.selection_date
+            WHERE w.round_number <= ?
+            ORDER BY w.round_number, p.source, w.selection_date
         '''
         
         conn = sqlite3.connect(self.database.db_path)
         df = pd.read_sql_query(query, conn, params=[round_number])
+        conn.close()
+        
+        return df
+        
+    def get_winners_all_rounds(self):
+        """Get winners from all rounds with round information."""
+        query = '''
+            SELECT p.mobile_number, p.unique_code, p.message, p.source, w.round_number
+            FROM participants p
+            JOIN winners w ON p.id = w.participant_id
+            ORDER BY w.round_number, p.source
+        '''
+        
+        conn = sqlite3.connect(self.database.db_path)
+        df = pd.read_sql_query(query, conn)
         conn.close()
         
         return df
