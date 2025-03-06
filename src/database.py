@@ -113,3 +113,29 @@ class Database:
             
         results, _ = self.execute_query(query, params)
         return results
+    
+    def get_participants_by_round(self, round_number, source):
+        """Get all participants for a specific round and source."""
+        query = '''
+            SELECT id, mobile_number, unique_code, message FROM participants
+            WHERE round_number = ? AND source = ?
+        '''
+        params = (round_number, source)
+        results, _ = self.execute_query(query, params)
+        return results
+
+    def get_all_winners(self):
+        """Get all previous winners with their mobile numbers and unique codes."""
+        query = '''
+            SELECT p.mobile_number, p.unique_code 
+            FROM participants p
+            JOIN winners w ON p.id = w.participant_id
+        '''
+        results, _ = self.execute_query(query)
+        
+        # Convert results to a dictionary-like structure with lists
+        winners = {
+            'mobile_number': [row[0] for row in results],
+            'unique_code': [row[1] for row in results]
+        }
+        return winners
