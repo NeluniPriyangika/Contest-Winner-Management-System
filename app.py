@@ -19,9 +19,9 @@ winner_manager = WinnerManager(database)
 import sqlite3
 
 def main():
-    st.set_page_config(page_title="Contest Winner Management System", layout="wide")
+    st.set_page_config(page_title="Raththi Winner Management System", layout="wide")
     
-    st.title("Contest Winner Management System")
+    st.title("Raththi Winner Management System")
     
     # Sidebar for navigation
     st.sidebar.title("Navigation")
@@ -44,57 +44,101 @@ def main():
     elif page == "Export Winners":
         export_winners_page()
 
+def get_latest_draw_number():
+    """Get the latest draw number from the database."""
+    try:
+        conn = sqlite3.connect(database.db_path)
+        cursor = conn.cursor()
+        
+        # Query to find the highest round_number in participants
+        query = "SELECT MAX(round_number) FROM participants"
+        cursor.execute(query)
+        result = cursor.fetchone()[0]
+        
+        conn.close()
+        return result if result else 0
+    except Exception as e:
+        print(f"Error getting latest draw number: {str(e)}")
+        return 0
+
 def import_data_page():
     st.header("Import Data")
     
-    round_number = st.number_input("Round Number", min_value=1, value=1, step=1)
+    # Get the latest draw number from the database
+    latest_draw = get_latest_draw_number()
+    suggested_draw = latest_draw + 1 if latest_draw else 1
     
-    st.subheader("Import WhatsApp Data")
-    whatsapp_file = st.file_uploader("Upload WhatsApp Excel Sheet", type=["xlsx", "xls"], key="whatsapp")
-    if st.button("Import WhatsApp Data"):
-        if whatsapp_file:
-            # Save uploaded file temporarily
-            temp_file = f"data/temp_whatsapp_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
-            with open(temp_file, "wb") as f:
-                f.write(whatsapp_file.getbuffer())
-            
-            success, message = data_processor.import_whatsapp_data(temp_file, round_number)
-            if success:
-                st.success(message)
-            else:
-                st.error(message)
-            
-            # Clean up temp file
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
-        else:
-            st.warning("Please upload a WhatsApp data file.")
+    # Display suggested draw number with option to change
+    st.info(f"Suggested Draw Number: {suggested_draw} (based on previous imports)")
     
+    # Allow manual override - this is a SINGLE round_number for BOTH imports
+    round_number = st.number_input("Draw Number", min_value=1, value=suggested_draw, step=1)
+    
+    # Draw a line to separate the round number from the import sections
+    st.markdown("---")
+    
+    # First import section - SMS data
+    st.subheader("Import SMS Data")
+    whatsapp_file = st.file_uploader("Upload SMS Excel Sheet", type=["xlsx", "xls"], key="sms")
+    
+    # Second import section - Post winners
     st.subheader("Import Post Winners")
     post_file = st.file_uploader("Upload Post Winners Excel Sheet", type=["xlsx", "xls"], key="post")
-    if st.button("Import Post Winners"):
-        if post_file:
-            # Save uploaded file temporarily
-            temp_file = f"data/temp_post_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
-            with open(temp_file, "wb") as f:
+    
+    if st.button("Import Data"):
+        if not whatsapp_file or not post_file:
+            st.warning("Please upload both SMS data and Post winners files.")
+        else:
+            # Save uploaded files temporarily
+            temp_sms_file = f"data/temp_sms_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
+            temp_post_file = f"data/temp_post_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
+            
+            with open(temp_sms_file, "wb") as f:
+                f.write(whatsapp_file.getbuffer())
+            with open(temp_post_file, "wb") as f:
                 f.write(post_file.getbuffer())
             
-            success, message = data_processor.import_post_winners(temp_file, round_number)
-            if success:
-                st.success(message)
-            else:
-                st.error(message)
+            # Import SMS data
+            sms_success, sms_message = data_processor.import_whatsapp_data(temp_sms_file, round_number)
+            if not sms_success:
+                st.error(f"SMS Data Import Failed: {sms_message}")
+                # Clean up temp files
+                if os.path.exists(temp_sms_file):
+                    os.remove(temp_sms_file)
+                if os.path.exists(temp_post_file):
+                    os.remove(temp_post_file)
+                return
             
-            # Clean up temp file
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
-        else:
-            st.warning("Please upload a Post winners file.")
+            # Import Post winners
+            post_success, post_message = data_processor.import_post_winners(temp_post_file, round_number)
+            if not post_success:
+                st.error(f"Post Winners Import Failed: {post_message}")
+                # Clean up temp files
+                if os.path.exists(temp_sms_file):
+                    os.remove(temp_sms_file)
+                if os.path.exists(temp_post_file):
+                    os.remove(temp_post_file)
+                return
+            
+            # If both imports are successful, show success message
+            st.success(f"SMS Data Import: {sms_message}")
+            st.success(f"Post Winners Import: {post_message}")
+            
+            # Increment the Draw number for the next round
+            next_draw = round_number + 1
+            st.info(f"Next Draw Number: {next_draw} (for the next import)")
+            
+            # Clean up temp files
+            if os.path.exists(temp_sms_file):
+                os.remove(temp_sms_file)
+            if os.path.exists(temp_post_file):
+                os.remove(temp_post_file)
+
 
 def select_winners_page():
-    st.header("Select WhatsApp Winners")
+    st.header("Select SMS Winners")
     
-    round_number = st.number_input("Round Number", min_value=1, value=1, step=1)
+    round_number = st.number_input("Drow Number", min_value=1, value=1, step=1)
     num_winners = st.number_input("Number of Winners to Select", min_value=1, value=5, step=1)
     
     if st.button("Select Random Winners"):
@@ -107,7 +151,7 @@ def select_winners_page():
 def view_winners_page():
     st.header("View All Winners")
     
-    round_number = st.number_input("Round Number", min_value=1, value=1, step=1)
+    round_number = st.number_input("Drow Number", min_value=1, value=1, step=1)
     
     if st.button("Show Winners"):
         winners_df = data_processor.get_all_winners(round_number)
@@ -201,13 +245,13 @@ def view_winners_page():
                 
                 # Show clean winners
                 if not clean_df.empty:
-                    st.subheader("Clean Winners (Single Round Only)")
+                    st.subheader("Clean Winners (Single Drow Only)")
                     st.dataframe(clean_df)
 
 def export_winners_page():
     st.header("Export Winners to Excel")
     
-    round_number = st.number_input("Round Number", min_value=1, value=1, step=1)
+    round_number = st.number_input("Drow Number", min_value=1, value=1, step=1)
     
     if st.button("Export Winners"):
         success, result = data_processor.export_winners_to_excel(round_number)
@@ -217,7 +261,7 @@ def export_winners_page():
             # Provide download button
             with open(result, "rb") as file:
                 st.download_button(
-                    label=f"Download Round {round_number} Winners",
+                    label=f"Download Drow {round_number} Winners",
                     data=file,
                     file_name=os.path.basename(result),
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
