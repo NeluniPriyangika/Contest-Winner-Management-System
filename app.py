@@ -238,7 +238,7 @@ def view_winners_page():
             # Highlight duplicates in the DataFrame
             st.dataframe(
                 winners_df.style.apply(
-                    lambda x: ['background-color: #FFC7CE' if x['is_duplicate'] else '' for _ in x], 
+                    lambda x: ['background-color: #8a64d6' if x['is_duplicate'] else '' for _ in x], 
                     axis=1
                 )
             )
@@ -387,18 +387,6 @@ def export_winners_page():
                 
                 st.success(f"Successfully exported winners to {result}")
                 
-                # Display summary with attractive formatting
-                st.markdown(f"""
-                <div style="padding: 10px; background-color: #f0f8ff; border-radius: 5px; margin-bottom: 10px;">
-                    <h3>Round {round_number} Winners Summary</h3>
-                    <ul>
-                        <li><b>Total Winners:</b> {total}</li>
-                        <li><b>WhatsApp Winners:</b> {whatsapp}</li>
-                        <li><b>Post Winners:</b> {post}</li>
-                        <li><b>Duplicate Winners:</b> {duplicates} (same mobile or code in other rounds)</li>
-                    </ul>
-                </div>
-                """, unsafe_allow_html=True)
                 
                 # Provide download button
                 with open(result, "rb") as file:
