@@ -153,29 +153,71 @@ def view_winners_page():
     
     round_number = st.number_input("Drow Number", min_value=1, value=1, step=1)
     
-    if st.button("Show Winners"):
-        winners_df = data_processor.get_all_winners(round_number)
-        
-        if winners_df.empty:
-            st.warning(f"No winners found for Round {round_number}.")
-        else:
-            # Identify duplicates based on both mobile_number and unique_code
-            winners_df['is_duplicate'] = winners_df.duplicated(subset=['mobile_number', 'unique_code'], keep=False)
-            winners_df['previous_rounds'] = winners_df.groupby(['mobile_number', 'unique_code'])['round_number'].transform(lambda x: ', '.join(map(str, x[:-1])))
-            
-            st.write(f"Total Winners: {len(winners_df)}")
-            st.write(f"WhatsApp Winners: {len(winners_df[winners_df['source'] == 'WhatsApp'])}")
-            st.write(f"Post Winners: {len(winners_df[winners_df['source'] == 'Post'])}")
-            
-            # Highlight duplicates in the DataFrame
-            st.dataframe(
-                winners_df.style.apply(
-                    lambda x: ['background-color: #FFC7CE' if x['is_duplicate'] else '' for _ in x], 
-                    axis=1
-                )
-            )
+    col1, col2 = st.columns(2)
     
-    else:  # All Rounds with duplicate detection
+    with col1:
+        if st.button("Show Winners"):
+            # Modified query to get only winners from the specified round
+            query = '''
+                SELECT p.mobile_number, p.unique_code, p.message, p.source, w.round_number
+                FROM participants p
+                JOIN winners w ON p.id = w.participant_id
+                WHERE w.round_number = ?
+                ORDER BY p.source
+            '''
+            
+            conn = sqlite3.connect(database.db_path)
+            winners_df = pd.read_sql_query(query, conn, params=[round_number])
+            conn.close()
+            
+            if winners_df.empty:
+                st.warning(f"No winners found for Round {round_number}.")
+            else:
+                # Identify duplicates based on both mobile_number and unique_code
+                # For this specific round, we need to check if these winners appeared in previous rounds
+                
+                # Get all winners from all rounds to check for duplicates
+                all_rounds_query = '''
+                    SELECT p.mobile_number, p.unique_code, w.round_number
+                    FROM participants p
+                    JOIN winners w ON p.id = w.participant_id
+                    ORDER BY w.round_number
+                '''
+                conn = sqlite3.connect(database.db_path)
+                all_winners = pd.read_sql_query(all_rounds_query, conn)
+                conn.close()
+                
+                # Mark as duplicate if this mobile number & code combination appears in other rounds
+                winners_df['is_duplicate'] = False
+                winners_df['previous_rounds'] = ''
+                
+                for idx, row in winners_df.iterrows():
+                    # Find all occurrences of this mobile number and unique code
+                    matches = all_winners[
+                        (all_winners['mobile_number'] == row['mobile_number']) & 
+                        (all_winners['unique_code'] == row['unique_code'])
+                    ]
+                    
+                    # If there are occurrences in other rounds
+                    other_rounds = matches[matches['round_number'] != round_number]['round_number'].tolist()
+                    
+                    if other_rounds:
+                        winners_df.at[idx, 'is_duplicate'] = True
+                        winners_df.at[idx, 'previous_rounds'] = ', '.join(map(str, other_rounds))
+                
+                st.write(f"Total Winners in Round {round_number}: {len(winners_df)}")
+                st.write(f"WhatsApp Winners: {len(winners_df[winners_df['source'] == 'WhatsApp'])}")
+                st.write(f"Post Winners: {len(winners_df[winners_df['source'] == 'Post'])}")
+                
+                # Highlight duplicates in the DataFrame
+                st.dataframe(
+                    winners_df.style.apply(
+                        lambda x: ['background-color: #FFC7CE' if x['is_duplicate'] else '' for _ in x], 
+                        axis=1
+                    )
+                )
+    
+    with col2:  
         if st.button("Show All Winners"):
             # Get winners from all rounds
             query = '''
