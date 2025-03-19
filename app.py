@@ -231,7 +231,7 @@ def view_winners_page():
                     winners_df.at[idx, 'duplicate_reason'] = "; ".join(reasons)
             
             st.write(f"Total Winners in Round {round_number}: {len(winners_df)}")
-            st.write(f"WhatsApp Winners: {len(winners_df[winners_df['source'] == 'WhatsApp'])}")
+            st.write(f"SMS Winners: {len(winners_df[winners_df['source'] == 'WhatsApp'])}")
             st.write(f"Post Winners: {len(winners_df[winners_df['source'] == 'Post'])}")
             st.write(f"Duplicate Winners: {len(winners_df[winners_df['is_duplicate']])}")
             
